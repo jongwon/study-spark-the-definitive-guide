@@ -203,7 +203,7 @@ https://www.w3resource.com/oracle/joins/oracle-semijoins.php
 ## 8.11 조인 사용시 문제점
 - 8.11.x에서는 문제점 대응 방법과 조인시 최적화에 관련된 힌트를 알려준다.
 
-## 8.11.1 복합 데이터 타입의 조인
+### 8.11.1 복합 데이터 타입의 조인
 
 - 불리언을 반환하는 모든 표현식은 조인 표현식이 될수있다.  
 https://jaceklaskowski.gitbooks.io/mastering-spark-sql/spark-sql-functions-collection.html
