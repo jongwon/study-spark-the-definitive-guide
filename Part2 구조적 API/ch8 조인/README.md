@@ -4,28 +4,28 @@
 - 스파크의 조인 타입과 사용법 그리고 클러스터상에서의 내부 동작방식에 대해서 알아본다.
 
 ## 8.1 조인 표현식
+- 왼쪽과 오른쪽 데이터셋에 있는 하나 이상의 키값을 비교하고   
+로우의 결합여부를 결정하는 조인 표현식의 평가 결과에 따라 두개의 데이터셋을 조인한다.
 
 ## 8.2 조인 타입
-- 
 
 |  <center>조인 타입</center>  | <center>설명</center>
 | :---------: | :------------------------------|
-|    inner    |  양쪽모두 키가 있는 로우를 유지              |
-|    outer    |  한쪽이라도 키가 있는 로우를 유지         |
+|    inner    |  양쪽모두 키가 있는 로우를 유지                     |
+|    outer    |  양쪽중 한쪽이라도 키가 있다면 로우를 유지           |
 | left outer  |  왼쪽 로우에 키가 있는 경우만 유지                  |
 | right outer |  오른쪽 로우에 키가 있는 경우만 유지                 |
 |  left semi  |  왼쪽과 오른쪽에 모두 키가 있는 경우 왼쪽만 유지           |
 | right semi  |  왼쪽과 오른쪽에 모두 키가 있는 경우 오른쪽만 유지          |
-|  left anti  |  오른쪽에 없는 키가 있는 왼쪽 로우만 유지               |
+|  left anti  |  왼쪽 데이터셋의 키가 오른쪽 데이터셋에 없는 경우에는 키가 일치하지 않는 왼쪽 데이터셋만 유지               |
 |   natural   |  두 데이터 셋에서 동일한 이름을 갖는 컬럼을 암시적으로 결합하는 조인 |
-|    cross    |  왼쪽한개당 오른쪽의 모든 경우를 조합해서 만듬 (nxm)         |
+|    cross    |  왼쪽 데이터셋의 모든 로우와 오른쪽 데이터셋의 모든 로우를 조합   |
 
 ## 8.3 내부 조인
 - 양쪽 DataFrame에 키가 있는지 확인해서 양쪽 모두 true인경우만 결합
 
     ```scala
     // 8장 전체에서 사용할 테이블 예제 등록
-
     val person = Seq(
         (0, "Bill Chambers", 0, Seq(100)),
         (1, "Matei Zaharia", 1, Seq(500, 250, 100)),
@@ -51,6 +51,7 @@
     ```scala
     // 옳은 join조건
     val joinExpression = person.col("graduate_program") === graduateProgram.col("id")
+
     // 옳지않은 join조건
     val wrongJoinExpression = person.col("name") === graduateProgram.col("school")
 
@@ -237,14 +238,36 @@ https://jaceklaskowski.gitbooks.io/mastering-spark-sql/spark-sql-functions-colle
 
     person.join(gradProgramDupe, joinExpr).show()
 
+    +---+----------------+----------------+---------------+----------------+-------+--------------------+-----------+
+    | id|            name|graduate_program|   spark_status|graduate_program| degree|          department|     school|
+    +---+----------------+----------------+---------------+----------------+-------+--------------------+-----------+
+    |  0|   Bill Chambers|               0|          [100]|               0|Masters|School of Informa...|UC Berkeley|
+    |  2|Michael Armbrust|               1|     [250, 100]|               1|  Ph.D.|                EECS|UC Berkeley|
+    |  1|   Matei Zaharia|               1|[500, 250, 100]|               1|  Ph.D.|                EECS|UC Berkeley|
+    +---+----------------+----------------+---------------+----------------+-------+--------------------+-----------+
+
     // 중복된 "graduate_program" 컬럼으로 인해 오류 발생
     person.join(gradProgramDupe, joinExpr).select("graduate_program").show()
+
+    => org.apache.spark.sql.AnalysisException: Reference 'graduate_program' is ambiguous, could be: graduate_program, graduate_program.;
+
     ```
+    
+
+    
 - 해결 방법 1 : 다른 조인 표현식 사용
 
     ```scala
     // 불리언 형태의 조인 표현식을 문자열이나 시퀀스 형태로 바꾸면 두 컬럼중 하나가 자동으로 제거 된다.
     person.join(gradProgramDupe,"graduate_program").select("graduate_program").show()
+
+    +----------------+
+    |graduate_program|
+    +----------------+
+    |               0|
+    |               1|
+    |               1|
+    +----------------+
     ```
 
 - 해결 방법 2 : 조인 후 컬럼 제거
@@ -253,8 +276,24 @@ https://jaceklaskowski.gitbooks.io/mastering-spark-sql/spark-sql-functions-colle
     person.join(gradProgramDupe, joinExpr).drop(person.col("graduate_program"))
     .select("graduate_program").show()
 
+    +----------------+
+    |graduate_program|
+    +----------------+
+    |               0|
+    |               1|
+    |               1|
+    +----------------+
+
     val joinExpr = person.col("graduate_program") === graduateProgram.col("id")
     person.join(graduateProgram, joinExpr).drop(graduateProgram.col("id")).show()
+
+    +---+----------------+----------------+---------------+-------+--------------------+-----------+
+    | id|            name|graduate_program|   spark_status| degree|          department|     school|
+    +---+----------------+----------------+---------------+-------+--------------------+-----------+
+    |  0|   Bill Chambers|               0|          [100]|Masters|School of Informa...|UC Berkeley|
+    |  2|Michael Armbrust|               1|     [250, 100]|  Ph.D.|                EECS|UC Berkeley|
+    |  1|   Matei Zaharia|               1|[500, 250, 100]|  Ph.D.|                EECS|UC Berkeley|
+    +---+----------------+----------------+---------------+-------+--------------------+-----------+
     ```
 
 
@@ -264,6 +303,14 @@ https://jaceklaskowski.gitbooks.io/mastering-spark-sql/spark-sql-functions-colle
     val gradProgram3 = graduateProgram.withColumnRenamed("id", "grad_id")
     joinExpr = person.col("graduate_program") === gradProgram3.col("grad_id")
     person.join(gradProgram3, joinExpr).show()
+
+    +---+----------------+----------------+---------------+-------+-------+--------------------+-----------+
+    | id|            name|graduate_program|   spark_status|grad_id| degree|          department|     school|
+    +---+----------------+----------------+---------------+-------+-------+--------------------+-----------+
+    |  0|   Bill Chambers|               0|          [100]|      0|Masters|School of Informa...|UC Berkeley|
+    |  2|Michael Armbrust|               1|     [250, 100]|      1|  Ph.D.|                EECS|UC Berkeley|
+    |  1|   Matei Zaharia|               1|[500, 250, 100]|      1|  Ph.D.|                EECS|UC Berkeley|
+    +---+----------------+----------------+---------------+-------+-------+--------------------+-----------+
     ```
 
 - 해결 방법 4 : DataFrame에 Alias
@@ -273,6 +320,14 @@ https://jaceklaskowski.gitbooks.io/mastering-spark-sql/spark-sql-functions-colle
         col("A.graduate_program")===col("B.graduate_program")
     )
     .select("A.graduate_program").show()
+
+    +----------------+
+    |graduate_program|
+    +----------------+
+    |               0|
+    |               1|
+    |               1|
+    +----------------+
     ```
 
 ## 8.12 스파크의 조인 수행 방식
