@@ -102,7 +102,7 @@
 
 ### 9.2.1 CSV 옵션
 <!--CSV 데이터소스 옵션-->
-|  <center>읽기/쓰기</center>  | <center>키</center>  | <center>사용 가능한 값</center>| <center>기본값</center>  | <center>설명</center>
+|  <div style="width:70px;"><center>읽기/쓰기</center></div>  | <center>키</center>  | <center>사용 가능한 값</center>| <center>기본값</center>  | <center>설명</center>
 |:---:|:---|:---|:---|:---|
 | 모두  | sep                      | 단일문자       | ,     | 각 필드와 값을 구분하는데 사용되는 단일 문자|
 | 모두  | header                   | true, false   | false&nbsp;&nbsp;&nbsp;&nbsp;  | 첫 번째 줄이 컬럼명인지 나타내는 불리언값|
@@ -214,7 +214,7 @@
 https://sparkbyexamples.com/spark/read-json-multiple-lines-in-spark/
 
 ### 9.3.1 JSON 옵션
-|  <center>읽기/쓰기</center>  | <center>키</center>  | <center>사용 가능한 값</center>| <center>기본값</center>  | <center>설명</center>
+|  <div style="width:70px;"><center>읽기/쓰기</center></div>  | <center>키</center>  | <center>사용 가능한 값</center>| <center>기본값</center>  | <center>설명</center>
 |:---:|:---|:---|:---|:---|
 | 모두 | compression 또는<br/>codec | none, uncompressed, bzip2, deflate, gzip, lz4, snappy | none | 스파크가 파일을 읽고 쓸 때 사용하는 압축 코덱을 정의합니다. |
 | 모두  | dateFormat | 자바의 SimpleDateFormat형식을 따르는 문자, 문자열   | yyyy-MM-dd  | 날짜 데이터 타입인 모든 필드에서 사용할 날짜 형식을 정의 합니다. |
@@ -283,7 +283,7 @@ csv, json보다 훨씬 효율적으로 동작하므로 큰 용량의 데이터�
     ```
 - 파케이 옵션
 
-|  <center>읽기/쓰기</center>  | <center>키</center>  | <center>사용 가능한 값</center>| <center>기본값</center>  | <center>설명</center>
+|  <div style="width:70px;"><center>읽기/쓰기</center></div>  | <center>키</center>  | <center>사용 가능한 값</center>| <center>기본값</center>  | <center>설명</center>
 |:---:|:---|:---|:---|:---|
 | 모두 | compression 또는<br/>codec | none, uncompressed, bzip2, deflate, gzip, lz4, snappy | none | 스파크가 파일을 읽고 쓸 때 사용하는 압축 코덱을 정의. |
 | 읽기 | mergeSchema | true, false | spark.sql.parquet.mergeSchema 속성의 설정값 | 동일한 테이블이나 폴더에 신규 추가된 파케이 파일에 컬럼을 점진적으로 추가할 수 있다. 이러한 기능을 활성/비활성화 하기위해 이 옵션을 사용 |
@@ -326,6 +326,18 @@ csvFile.write.format("orc").mode("overwrite").save("/tmp/my-json-file.orc")
 ```
 
 ## 9.6 SQL 데이터베이스 
+- SQLite, MySQL, PostgreSQL, Oracle같은 데이터베이스에 JDBC로 연결할 수 있다.
+
+- 데이터베이스는 원시 파일 형태(로그, CSV와같은)가 아니므로 고려해야할 것들이 더 많다.  
+예) 데이터베이스 인증/접속 정보, 네트워크 접속 상태
+- 예제는 쉬운 실행을 위해 SQLite로 작성되었다.  
+운영에서 사용시에는 Mysql, Oracle등의 전통적인 RDB를 사용해야 한다.
+
+- 데이터를 읽고 쓰기 위해서는 스파크 클래스패스에 JDBC드라이버를 추가해야 한다.
+    ```properties
+    # spark-shell실행시 드라이버 추가
+    ./bin/spark-shell --driver-class-path postgresql-9.4.1207.jar --jars postgresql-9.4.1207.jar
+    ```
 
 ### 9.6.1 SQL 데이터베이스 읽기
 
