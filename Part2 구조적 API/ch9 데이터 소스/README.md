@@ -135,7 +135,17 @@
         .option("header", "true")
         .option("mode", "FAILFAST")
         .option("inferSchema", "true")
-        .load("some/path/to/file.csv")
+        .load("/data/data/flight-data/csv/2010-summary.csv").show(5)
+
+    +-----------------+-------------------+-----+
+    |DEST_COUNTRY_NAME|ORIGIN_COUNTRY_NAME|count|
+    +-----------------+-------------------+-----+
+    |    United States|            Romania|    1|
+    |    United States|            Ireland|  264|
+    |    United States|              India|   69|
+    |            Egypt|      United States|   24|
+    |Equatorial Guinea|      United States|    1|
+    +-----------------+-------------------+-----+
     ```
 - 비정상적인 데이터를 얼마나 수용할 수 있을지 읽기 모드로 지정
     ```scala
@@ -154,6 +164,16 @@
         .schema(myManualSchema)
         .load("/data/flight-data/csv/2010-summary.csv")
         .show(5)
+
+    +-----------------+-------------------+-----+
+    |DEST_COUNTRY_NAME|ORIGIN_COUNTRY_NAME|count|
+    +-----------------+-------------------+-----+
+    |    United States|            Romania|    1|
+    |    United States|            Ireland|  264|
+    |    United States|              India|   69|
+    |            Egypt|      United States|   24|
+    |Equatorial Guinea|      United States|    1|
+    +-----------------+-------------------+-----+
     ```
 
     ```scala
@@ -170,6 +190,9 @@
     .schema(myManualSchema)
     .load("/data/flight-data/csv/2010-summary.csv")
     .take(5)
+
+    // 에러
+    org.apache.spark.SparkException: Job aborted due to stage failure: Task 0 in stage 24.0 failed 1 times, most recent failure: Lost task 0.0 in stage 24.0 (TID 35, localhost, executor driver): org.apache.spark.SparkException: Malformed records are detected in record parsing. Parse Mode: FAILFAST.
     ```
 
 ### 9.2.3 CSV 파일 쓰기
@@ -210,6 +233,16 @@ https://sparkbyexamples.com/spark/read-json-multiple-lines-in-spark/
     ```scala
     spark.read.format("json").option("mode", "FAILFAST").schema(myManualSchema)
     .load("/data/flight-data/json/2010-summary.json").show(5)
+
+    +-----------------+-------------------+-----+
+    |DEST_COUNTRY_NAME|ORIGIN_COUNTRY_NAME|count|
+    +-----------------+-------------------+-----+
+    |    United States|            Romania|    1|
+    |    United States|            Ireland|  264|
+    |    United States|              India|   69|
+    |            Egypt|      United States|   24|
+    |Equatorial Guinea|      United States|    1|
+    +-----------------+-------------------+-----+
     ```
 
 ### 9.3.3 JSON 파일 쓰기
@@ -221,16 +254,76 @@ https://sparkbyexamples.com/spark/read-json-multiple-lines-in-spark/
     ```
 
 ## 9.4 파케이 파일
+- 아파치 스파크와 잘 호환되며 스파크의 기본 파일 포맷이다.
+- 오픈소스 컬럼 기반의 데이터 저장 방식
+- csv, json보다 적은용량 (snappy압축방식을 사용하면 30%이하 수준)
+- 전체 파일을 읽는 대신 개별 컬럼을 읽음  
+csv, json보다 훨씬 효율적으로 동작하므로 큰 용량의 데이터는 파케이 포맷으로 저장하는것이 좋다.
+- 복합 데이터 타입을 지원한다. (배열, 맵, 구조체)
 
 ### 9.4.1 파케이 파일 읽기
+- 파케이는 옵션이 거의 없다.  
+데이터 저장시 자체 스키마를 사용해 데이터를 저장하기 때문이다.
+- 파케이 파일은 스키마가 파일 자체에 내장되어 있으므로 스키마를 추정할 필요가 없다.
+- 스키마를 설정할 수도 있지만 이런작업은 거의 필요가 없다.
+
+    ```scala
+    spark.read.format("parquet")
+        .load("/data/flight-data/parquet/2010-summary.parquet").show(5)
+
+    +-----------------+-------------------+-----+
+    |DEST_COUNTRY_NAME|ORIGIN_COUNTRY_NAME|count|
+    +-----------------+-------------------+-----+
+    |    United States|            Romania|    1|
+    |    United States|            Ireland|  264|
+    |    United States|              India|   69|
+    |            Egypt|      United States|   24|
+    |Equatorial Guinea|      United States|    1|
+    +-----------------+-------------------+-----+
+    ```
+- 파케이 옵션
+
+|  <center>읽기/쓰기</center>  | <center>키</center>  | <center>사용 가능한 값</center>| <center>기본값</center>  | <center>설명</center>
+|:---:|:---|:---|:---|:---|
+| 모두 | compression 또는<br/>codec | none, uncompressed, bzip2, deflate, gzip, lz4, snappy | none | 스파크가 파일을 읽고 쓸 때 사용하는 압축 코덱을 정의. |
+| 읽기 | mergeSchema | true, false | spark.sql.parquet.mergeSchema 속성의 설정값 | 동일한 테이블이나 폴더에 신규 추가된 파케이 파일에 컬럼을 점진적으로 추가할 수 있다. 이러한 기능을 활성/비활성화 하기위해 이 옵션을 사용 |
 
 ### 9.4.2 파케이 파일 쓰기 
+- 파티션당 하나의 파일을 만들며 DataFrame을 단일 폴더에 저장.
+- 파일 경로만 명시하면 된다. (csv, json에 비해 추가옵션이 거의 없음)
+    ```scala
+    csvFile.write.format("parquet").mode("overwrite")
+    .save("/tmp/my-parquet-file.parquet")
+    ```
 
 ## 9.5 ORC 파일
+- 컬럼 기반의 파일 포맷
+- ORC(Optimized Row Columnar)는 Hadoop에서 데이터처리 최적화를 위해 개발되었다. https://box0830.tistory.com/207
+- 대규모 스트리밍 읽기에 최적화되었고 로우를 빠르게 찾아낼 수 있다.
+- 경우에 따라서는 파케이보다 파일 용량이 더 작다.
+- ORC와 파케이의 차이점 (두 포맷은 매우 유사하나 근본적인 차이점이 있다.)
+    - ORC : 하이브에 최적화
+    - 파케이 : 스파크에 최적화
 
 ### 9.5.1 ORC 파일 읽기
+```scala
+spark.read.format("orc").load("/data/flight-data/orc/2010-summary.orc").show(5)
+
++-----------------+-------------------+-----+
+|DEST_COUNTRY_NAME|ORIGIN_COUNTRY_NAME|count|
++-----------------+-------------------+-----+
+|    United States|            Romania|    1|
+|    United States|            Ireland|  264|
+|    United States|              India|   69|
+|            Egypt|      United States|   24|
+|Equatorial Guinea|      United States|    1|
++-----------------+-------------------+-----+
+```
 
 ### 9.5.2 ORC 파일 쓰기 
+```scala
+csvFile.write.format("orc").mode("overwrite").save("/tmp/my-json-file.orc")
+```
 
 ## 9.6 SQL 데이터베이스 
 
@@ -270,7 +363,7 @@ https://sparkbyexamples.com/spark/read-json-multiple-lines-in-spark/
 
 ## 9.8 고급 I/O 개념
 - 쓰기 작업 전에 파티션 수를 조절함으로써 병렬 쓰기할 수를 제어할 수 있다. (속도 향상)
-- 버켓팃, 파티셔닝을 조절해서 데이터의 저장 구조를 제어할 수 있다. (분할 저장)
+- 버켓팅, 파티셔닝을 조절해서 데이터의 저장 구조를 제어할 수 있다. (분할 저장)
 
 ### 9.8.1 분할 가능한 파일 타입과 압축 방식
 - 특정 파일 포맷은 분할을지원 한다.
