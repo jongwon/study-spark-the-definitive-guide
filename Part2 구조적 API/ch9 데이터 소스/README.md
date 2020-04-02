@@ -338,17 +338,225 @@ csvFile.write.format("orc").mode("overwrite").save("/tmp/my-json-file.orc")
     # spark-shell실행시 드라이버 추가
     ./bin/spark-shell --driver-class-path postgresql-9.4.1207.jar --jars postgresql-9.4.1207.jar
     ```
+- JDBC 데이터소스 옵션
+    |  <div style="width:70px;"><center>속성명</center></div>  | <center>의미</center>  
+    |:---|:---|
+    | url   | 접속을 위한 JDBC URL. 소스 시스템에 특화된 설정은 URL에 있다.  <br/>(예: jdbc:postgresql://localhost/test?user=fred&password=secret)   |
+    | dbtable    | 읽을 JDBC 테이블을 설정한다. SQL쿼리의 FROM절에 유효한 모든 것을 사용할 수 있다. <br/>예를들어 ***테이블 대신 괄호 안에 서브쿼리***를 사용할 수도 있다.    |
+    | driver    | 지정한 URL에 접속할 때 사용할 JDBC 드라이버 클래스명.   |
+    | partitionColumn, lowerBound, upperBound     | 세 가지 옵션은 항상 같이 지정해야 하며 추가로 numPartitions도 반드시 지정해야 한다. 다수의 워커에서 병렬로 테이블을 나눠 읽는 방법을 정의 한다. partitionColumn을 기준으로 데이터를 병렬로 읽게 된다. 반드시 해당 테이블의 수치형 컬럼이어야 한다. lowerBound, upperBound는 가져올 데이터의 최소~최대 범위를 정의한다. <br/>만약 partitionColumn이 seq(게시판 글목록 번호)이고 lowerBound가 1 upperBound가 100 numPartitions가 10 이라면 10개의 워커에서 동시접속하여 각각 분할조회를 하게된다. 이때 각 워커에서 자동생성되는 where절 조건은 다음과 같다. seq between 1 and 10, seq between 11 and 20 ... seq between 91 and 100 |
+    | numPartitions    | 테이블의 데이터를 병렬로 읽거나 쓰기 작업에 사용할 수 있는 최대 파티션 수를 결정한다. 이 속성은 최대 동시 **JDBC 연결** 수를 결정한다. 쓰기에 사용되는 파티션 수가 이 값을 초과하는 경우 쓰기 연산 전에 coalesce(numPartitions)를 실행해 파티션 수를 이 값에 맞게 줄이게 된다.  |
+    | fetchsize    | 한 번에 얼마나 많은 로우를 가져올지 결정하는 JDBC 패치 크기를 설정한다. 이 옵션은 기본적으로 패치 크기가 작게 설정된 JDBC 드라이버의 성능을 올리는데 도움이 된다. (예:오라클의 경우 패치 크기가 10). 이 옵션은 읽기에만 적용된다.   |
+    | batchsize    | 한 번에 얼마나 많은 로우를 저장할지 결정하는 JDBC의 배치 크기를 설정한다. 이 옵션은 JDBC 드라이버의 성능을 향상시킬 수 있다. 이 옵션은 쓰기에만 적용되며 기본값은 1000   |
+    | isolationLevel    | 현재 연결에 적용되는 트랜잭션 격리 수준을 정의. 이 값은 JDBC Connection 객체에서 정의하는 표준 트랜잭션 격리 수준에 해당하는 NONE, READ_COMMITTED, READ_UNCOMMITTED, REPEATABLE_READ, SERIALIZABLE중 하나가 될 수 있다. 기본값은 READ_UNCOMMITTED. 이 옵션은 쓰기에만 적용된다. [(java.sql.Connection API 참고)](https://docs.oracle.com/javase/8/docs/api/java/sql/Connection.html) |
+    | truncate    | JDBC writer 관련 옵션. SaveMode.Overwrite가 활성화되면 스파크는 기존 테이블을 삭제하거나 재생성하는 대신 데이터베이스의 truncate 명령을 실행한다. 이 옵션의 기본값은 false. 쓰기에만 적용된다.   |
+    | createTableOptions    | JDBC writer관련 옵션이다. 이 옵션을 지정하면 테이블 생성시 특정 테이블의 데이터베이스와 파티션 옵션을 설정할 수 있다. (예: ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Spark SQL test table')   |
+    | createTableColumnTypes    | 테이블을 생성할 때 기본값 대신 사용할 데이터베이스 컬럼 데이터 타입을 정의 한다. 데이터 타입 정보는 반드시 CREATE TABLE에서 사용하는 컬럼 정의구문과 동일한 형식으로 지정해야 한다. (예 name CHAR(64), comments VARCHAR(1024)). 지정된 데이터 타입은 유효한 스파크 SQL 데이터 타입이어야 한다. 이 옵션은 쓰기에만 적용된다.   |
 
 ### 9.6.1 SQL 데이터베이스 읽기
+- SQLite에서 데이터 읽기. (파일 읽기 및 다른 데이터소스 읽기와 비슷하다.)
+    ```scala
+    // SQLite 접속설정 변수
+    val driver =  "org.sqlite.JDBC"
+    val path = "file:///data//data/flight-data/jdbc/my-sqlite.db"
+    val url = s"jdbc:sqlite:/${path}"
+    val tablename = "flight_info"
+
+    // SQLite JDBC 접속 테스트
+    import java.sql.DriverManager
+    val connection = DriverManager.getConnection(url)
+    connection.isClosed()
+    connection.close()
+
+    // SQLite 테이블을 읽어서 DataFrame 생성 (사용자 인증 정보가 필요 없어서 간단하다.)
+    val dbDataFrame = spark.read
+        .format("jdbc")
+        .option("url", url)
+        .option("dbtable", tablename)
+        .option("driver",  driver).load()
+    ```
+
+- PostgreSQL과같은 RDB는 설정정보가 더 많다.
+    ```scala
+    // PostgreSQL과같은 일반적인 RDB는 더 많은 설정이 필요. (바로 위 예제와 동일한 작업 수행)
+    val pgDF = spark.read
+        .format("jdbc")
+        .option("driver", "org.postgresql.Driver")
+        .option("url", "jdbc:postgresql://database_server")
+        .option("dbtable", "schema.tablename")
+        .option("user", "username")
+        .option("password","my-secret-password").load()
+    ```
+
+- SQLite로부터 생성된 DataFrame은 기존 예제에서의 DataFrame과 같다.   
+DataFrame의 스키마는 DB의 테이블 정보를 읽어서 만들어낸다.
+    ```scala
+    // 중복 데이터가 제거된 국가 목록을 조회.
+    dbDataFrame.select("DEST_COUNTRY_NAME").distinct().show(5)
+
+    +-----------------+
+    |DEST_COUNTRY_NAME|
+    +-----------------+
+    |         Anguilla|
+    |           Russia|
+    |         Paraguay|
+    |          Senegal|
+    |           Sweden|
+    +-----------------+
+    ```
 
 ### 9.6.2 쿼리 푸시다운 
+- DataFrame을 만들기 전에 데이터를 필터링할 수 있다. (원하는 컬럼만 조회)  
+실행계획의 PushedFilters부분에서 확인
+
+    ```scala
+    dbDataFrame.select("DEST_COUNTRY_NAME").distinct().explain
+
+    == Physical Plan ==
+    *(2) HashAggregate(keys=[DEST_COUNTRY_NAME#45], functions=[])
+    +- Exchange hashpartitioning(DEST_COUNTRY_NAME#45, 200)
+    +- *(1) HashAggregate(keys=[DEST_COUNTRY_NAME#45], functions=[])
+        +- *(1) Scan JDBCRelation(flight_info) [numPartitions=1] [DEST_COUNTRY_NAME#45] PushedFilters: [], ReadSchema: struct<DEST_COUNTRY_NAME:string>
+    ```
+- filter(where)처리는 RDB로 위임(push down)한다. filter처리가 spark가 아닌 RDB에서 처리된다는 의미.  
+실행계획의 PushedFilters부분에서 확인
+    ```scala
+    dbDataFrame.filter("DEST_COUNTRY_NAME in ('Anguilla', 'Sweden')").explain
+
+    == Physical Plan ==
+    *(1) Scan JDBCRelation((SELECT DISTINCT(DEST_COUNTRY_NAME) FROM flight_info)
+        AS flight_info) [numPartitions=1] [DEST_COUNTRY_NAME#110] PushedFilters: [*In(DEST_COUNTRY_NAME, [Anguilla,Sweden])], ReadSchema: struct<DEST_COUNTRY_NAME:string>
+    ```
+
+- 모든 스파크 함수를 SQL에 맞게 변환하지 못하므로 전체 쿼리를 DB에 전달해  
+DB에서 처리후 결과만 DataFrame으로 받을 수 있다.
+
+- option에 테이블명 대신 SQL쿼리를 서브쿼리로 명시하면 된다.  
+
+    ```scala
+    // // in Scala
+    val pushdownQuery = """(SELECT DISTINCT(DEST_COUNTRY_NAME) FROM flight_info)
+    AS flight_info"""
+    
+    val dbDataFrame = spark.read.format("jdbc")
+    .option("url", url).option("dbtable", pushdownQuery).option("driver",  driver)
+    .load()
+    
+    dbDataFrame.explain()
+
+    == Physical Plan ==
+    *(1) Scan JDBCRelation((SELECT DISTINCT(DEST_COUNTRY_NAME) FROM flight_info)
+        AS flight_info) [numPartitions=1] [DEST_COUNTRY_NAME#117] PushedFilters: [], ReadSchema: struct<DEST_COUNTRY_NAME:string>
+        pushdownQuery: String =
+        (SELECT DISTINCT(DEST_COUNTRY_NAME) FROM flight_info)
+        AS flight_info
+        dbDataFrame: org.apache.spark.sql.DataFrame = [DEST_COUNTRY_NAME: string]
+    ```
+
+#### 데이터베이스 병렬로 읽기
+- SQL 데이터베이스를 병렬로 읽으려면 몇 가지 수동 설정이 필요하다.
+- 옵션 목록 중 numPartition 옵션을 사용해 읽기/쓰기 동시 작업수를 제한할 수 있다.
+
+    ```scala
+    val dbDataFrame = spark.read.format("jdbc")
+        .option("url", url)
+        .option("dbtable", tablename)
+        .option("driver", driver)
+        .option("numPartitions", 10) // 동시 접속수
+        .load()
+
+    dbDataFrame.select("DEST_COUNTRY_NAME").distinct().show()
+
+    +--------------------+
+    |   DEST_COUNTRY_NAME|
+    +--------------------+
+    |            Anguilla|
+    |              Russia|
+    |            Paraguay|
+    |             Senegal|
+    |              Sweden|
+    |            Kiribati|
+    |              Guyana|
+    |         Philippines|
+    |            Malaysia|
+    |           Singapore|
+    |                Fiji|
+    |              Turkey|
+    |             Germany|
+    |         Afghanistan|
+    |              Jordan|
+    |               Palau|
+    |Turks and Caicos ...|
+    |              France|
+    |              Greece|
+    |              Taiwan|
+    +--------------------+
+    ```
+
+- predicates 옵션으로 조건절을 줄 수 있고 predicates옵션의 배열수만큼 파티션이 생성된다.  
+특정 rdd파티션에 특정 조건에 해당하는 데이터만 위치시킬 수 있다.
+    ```scala
+    val props = new java.util.Properties
+    props.setProperty("driver", "org.sqlite.JDBC")
+
+    val predicates = Array(
+        "DEST_COUNTRY_NAME = 'Sweden' OR ORIGIN_COUNTRY_NAME = 'Sweden'",
+        "DEST_COUNTRY_NAME = 'Anguilla' OR ORIGIN_COUNTRY_NAME = 'Anguilla'")
+    spark.read.jdbc(url, tablename, predicates, props).show()
+    spark.read.jdbc(url, tablename, predicates, props).rdd.getNumPartitions // 2
+
+    +-----------------+-------------------+-----+
+    |DEST_COUNTRY_NAME|ORIGIN_COUNTRY_NAME|count|
+    +-----------------+-------------------+-----+
+    |           Sweden|      United States|   65|
+    |    United States|             Sweden|   73|
+    |         Anguilla|      United States|   21|
+    |    United States|           Anguilla|   20|
+    +-----------------+-------------------+-----+
+    ```
+
+- predicates 옵션 사용시 조건절을 잘못 정의하면 중복 로우가 많이 발생할 수 있다.
+    ```scala
+    val props = new java.util.Properties
+    props.setProperty("driver", "org.sqlite.JDBC")
+
+    val predicates = Array(
+        "DEST_COUNTRY_NAME != 'Sweden' OR ORIGIN_COUNTRY_NAME != 'Sweden'",
+        "DEST_COUNTRY_NAME != 'Anguilla' OR ORIGIN_COUNTRY_NAME != 'Anguilla'")
+    spark.read.jdbc(url, tablename, predicates, props).count() // 510
+    ```
+
+#### 슬라이딩 윈도우 기반의 파티셔닝
+- 수치형 count 컬럼을 기준으로 분할 한다.  
+처음과 마지막 파티션 사이의 최솟값, 최댓값을 사용한다. (lowerBound, upperBound)
+
+- numPartitions에 설정된 값만큼 병렬로 쿼리를 요청하며 numPartitions만큼 파티션수가 생성된다.
+    ```scala
+    val colName = "count"
+    val lowerBound = 0L
+    val upperBound = 348113L // this is the max count in our database
+    val numPartitions = 10
+
+    spark.read.jdbc(url,tablename,colName,lowerBound,upperBound,numPartitions,props)
+    .count() // 255
+    ```
 
 ### 9.6.3 SQL 데이터베이스 쓰기
-- JDBC URI를 지정하고 쓴다.
+- 설정된 JDBC URI, 쓰기모드에 따라 데이터를 쓰게 된다.
+    ```scala
+    val csvFile = spark.read.format("csv")
+    .option("header", "true").option("mode", "FAILFAST").schema(myManualSchema)
+    .load("/data/flight-data/csv/2010-summary.csv")
 
-```scala
-// 이전 예제에서 정의해놓은 CSV DataFrame을 활용
-```
+    // 덮어쓰기
+    val newPath = "jdbc:sqlite://tmp/my-sqlite.db"
+    csvFile.write.mode("overwrite").jdbc(newPath, tablename, props)
+    spark.read.jdbc(newPath, tablename, props).count() // 255
+
+    // 파일에 row추가
+    csvFile.write.mode("append").jdbc(newPath, tablename, props)
+    spark.read.jdbc(newPath, tablename, props).count() // 765
+    ```
 
 ## 9.7 텍스트 파일
 - 파일의 각 줄은 DataFrame의 레코드가 된다.
